@@ -187,13 +187,20 @@ class TypingQuizWidget(QWidget):
             else:
                 QMessageBox.warning(self, "경고", "파일 선택이 취소되었습니다.")
 
-
     def eventFilter(self, obj, event):
-        if obj is self.answer_edit and event.type() == QEvent.Type.KeyPress and self.answer_edit.isReadOnly():
+        if obj is self.answer_edit and event.type() == QEvent.Type.KeyPress:
             key_event = QKeyEvent(event)
-            if key_event.key() == Qt.Key.Key_Backspace:
+
+            # 'Shift' 또는 'Ctrl' 키가 눌렸을 때 힌트 보기
+            if key_event.key() in [Qt.Key.Key_Shift, Qt.Key.Key_Control]:
+                self.show_hint()
+                return True
+            
+            # Backspace 키 처리 (읽기 전용일 때만 동작)
+            if key_event.key() == Qt.Key.Key_Backspace and self.answer_edit.isReadOnly():
                 self.retry_current_question()
                 return True
+                
         return super().eventFilter(obj, event)
 
     def toggle_mode(self):
@@ -316,9 +323,11 @@ class TypingQuizWidget(QWidget):
         self.current_word = word
         self.current_meanings = meanings
         self.current_sentences = sentences
-        self.current_translations = translations
-
-        self.hint_label.setText("")
+        # translations는 일반적으로 리스트 형태이므로, 번역 힌트로 사용할 첫 번째 요소만 저장합니다.
+        self.current_translations = translations # 원본 리스트는 유지
+        
+        # 힌트 레이블은 항상 초기화
+        self.hint_label.setText("") 
         self.feedback_label.setText("")
         self.next_button.hide()
         self.retry_button.hide()
@@ -331,22 +340,33 @@ class TypingQuizWidget(QWidget):
             self.hint_button.show()
             idx = random.randint(0, len(self.current_sentences)-1)
             sentence = self.current_sentences[idx]
-            translation = self.current_translations[idx]
+            
+            # 여기서 번역 힌트를 current_translation_selected에 정확히 저장합니다.
+            # translations 리스트에 여러 번역이 있을 수 있으므로, 어떤 것을 보여줄지 결정합니다.
+            # 일단 첫 번째 번역만 보여주는 것으로 가정합니다.
+            selected_translation = translations[idx] if translations and idx < len(translations) else ""
             self.current_sentence_selected = sentence
-            self.current_translation_selected = translation
-            hint = self.current_word[0] if self.current_word else ''
-            masked_word = hint + "_" * (len(self.current_word)-1)
+            self.current_translation_selected = selected_translation 
+            
+            # 이 부분은 '문제'를 표시하는 로직입니다. 힌트를 표시하는 부분이 아닙니다.
+            # 빈칸을 채울 단어의 첫 글자만 보여주는 마스킹 처리입니다.
+            hint_char = self.current_word[0] if self.current_word else ''
+            masked_placeholder = hint_char + "_" * (len(self.current_word)-1)
+            
+            # re.IGNORECASE를 사용하여 대소문자 무시
+            masked_word_pattern = re.compile(re.escape(self.current_word), re.IGNORECASE)
             
             question_text = sentence
-            if self.current_word in sentence:
-                question_text = sentence.replace(self.current_word, f"({masked_word})", 1)
+            if masked_word_pattern.search(sentence):
+                # 찾은 단어를 (__)로 대체 (첫 번째 일치만)
+                question_text = masked_word_pattern.sub(f"({masked_placeholder})", sentence, 1)
             else:
-                question_text = f"{sentence}\n\n({masked_word})"
+                question_text = f"{sentence}\n\n({masked_placeholder})"
 
             self.question_label.setText(f"다음 문장의 빈칸을 채우세요:\n\n➡ {question_text}")
             self.answer_edit.setPlaceholderText("빈칸에 들어갈 영어 단어 입력 후 Enter")
         else:
-            self.hint_button.hide()
+            self.hint_button.hide() # 예문 모드가 아니면 힌트 버튼 숨기기
             if self.modes[self.mode_index] == "뜻→영어":
                 all_meanings = "; ".join(self.current_meanings)
                 self.question_label.setText(f"다음 뜻의 영어 단어는?\n\n➡ {all_meanings}")
@@ -373,33 +393,56 @@ class TypingQuizWidget(QWidget):
         else:
             self.next_question() 
 
-    def _normalize_korean_meaning(self, meaning_text):
-        cleaned_text = re.sub(r'\([^)]*\)', '', meaning_text)
-        cleaned_text = re.sub(r'\[[^\]]*\]', '', cleaned_text)
-        return cleaned_text.replace(" ", "").strip()
+    def _normalize_text_for_comparison(self, text):
+        """텍스트에서 특수문자를 제거하고 공백을 정규화합니다."""
+        # 3. 정답에 ~이나 __ 같은게 있거나 없어도 정답 처리
+        # 한글, 영어, 숫자만 남기고 제거 (공백은 그대로 둠)
+        # ^(한글 범위)|^(영어 알파벳)|^(숫자)|^(공백)
+        text = re.sub(r'[^가-힣a-zA-Z0-9\s]', '', text) 
+        text = text.lower().strip() # 소문자 변환 및 양쪽 공백 제거
+        text = re.sub(r'\s+', ' ', text) # 여러 공백을 하나의 공백으로
+        return text
 
     def show_answer(self):
-        user_answer = self.answer_edit.text().strip()
-        if not user_answer:
+        user_answer_raw = self.answer_edit.text().strip()
+        if not user_answer_raw:
             return
 
+        user_answer_normalized = self._normalize_text_for_comparison(user_answer_raw)
         mode = self.modes[self.mode_index]
         is_correct = False
         correct_info = ""
 
         if mode in ["뜻→영어", "예문→단어"]:
-            is_correct = user_answer.lower() == self.current_word.lower()
-            correct_info = self.current_word
-        else: # "영어→뜻" 모드
-            normalized_user_answer = self._normalize_korean_meaning(user_answer)
-            normalized_meanings = [self._normalize_korean_meaning(m) for m in self.current_meanings]
+            correct_word_normalized = self._normalize_text_for_comparison(self.current_word)
+            
+            # 2. 예문 정답 작성 시 예문에 있는 모든 문장을 작성해도 정답 처리
+            if mode == "예문→단어" and hasattr(self, "current_sentence_selected"):
+                # 사용자가 입력한 내용이 원문 예문 (대소문자 및 특수문자 무시)과 같으면 정답 처리
+                current_sentence_normalized = self._normalize_text_for_comparison(self.current_sentence_selected)
+                if user_answer_normalized == current_sentence_normalized:
+                    is_correct = True
+                    correct_info = self.current_word # 정답 표시는 원래 단어로
+                elif user_answer_normalized == correct_word_normalized: # 단어만 입력해도 정답
+                    is_correct = True
+                    correct_info = self.current_word
+                else:
+                    is_correct = False
+                    correct_info = self.current_word # 오답 시에는 원래 단어 표시
+            else: # 뜻→영어 모드 또는 예문인데 문장 일치 안되는 경우
+                is_correct = user_answer_normalized == correct_word_normalized
+                correct_info = self.current_word
+                
+        else: # "영어→뜻" 모드 (한국어 뜻)
+            normalized_user_answer = self._normalize_text_for_comparison(user_answer_raw)
+            normalized_meanings = [self._normalize_text_for_comparison(m) for m in self.current_meanings]
             is_correct = normalized_user_answer in normalized_meanings
             correct_info = ", ".join(self.current_meanings)
 
         if is_correct:
             self.feedback_label.setText(f"✅ 정답! ({correct_info})")
         else:
-            self.feedback_label.setText(f"❌ 오답!\n입력: {self.answer_edit.text()}\n정답: {correct_info}")
+            self.feedback_label.setText(f"❌ 오답!\n입력: {user_answer_raw}\n정답: {correct_info}")
 
         self.answer_edit.setReadOnly(True) 
         self.next_button.show()
