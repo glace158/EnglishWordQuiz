@@ -617,7 +617,7 @@ balanced,False
 balloon,False
 barely,False
 barn,False
-bartender,False
+bartender,True
 basement,True
 behalf,False
 belief,False
@@ -748,8 +748,8 @@ defender,False
 defensive,False
 delegation,False
 delicate,False
-demanding,False
-demands,False
+demanding,True
+demands,True
 demolish,False
 demonstrate,False
 dental,False
@@ -771,7 +771,7 @@ diamond,False
 diesel,False
 digest,False
 digestion,False
-dip,False
+dip,True
 diplomacy,False
 director,False
 dirt,False
@@ -851,11 +851,11 @@ feast,False
 feeble,False
 filter,False
 finance,False
-fingernail,False
+fingernail,True
 finite,False
-fireplace,False
+fireplace,True
 fitness,False
-flashback,False
+flashback,True
 fleet,False
 flexible,False
 fluctuated,False
@@ -883,9 +883,9 @@ generation,False
 genetics,False
 glare,False
 glimpse,False
-goalkeeper,False
+goalkeeper,True
 governor,False
-grain,False
+grain,True
 grant,False
 graphics,False
 grill,False
@@ -903,8 +903,8 @@ hectic,False
 hell,False
 helmet,False
 heroic,False
-highlight,False
-hint,False
+highlight,True
+hint,True
 historically,False
 hook,False
 horizon,False
@@ -1125,7 +1125,7 @@ pork,True
 portable,True
 portion,False
 possess,False
-postal,False
+postal,True
 potential,False
 pottery,False
 predetermine,False
@@ -1233,7 +1233,7 @@ rigid,False
 rival,False
 robbery,False
 romantic,False
-rope,False
+rope,True
 rot,False
 rough,False
 route,False
